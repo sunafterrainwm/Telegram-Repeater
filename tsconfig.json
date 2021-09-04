@@ -1,0 +1,36 @@
+{
+	"rules": {
+		"no-var-requires": 0
+	},
+	"compilerOptions": {
+		"allowJs": true,
+		"allowSyntheticDefaultImports": true,
+		"baseUrl": "./src",
+		"esModuleInterop": true,
+		"importHelpers": true,
+		"noImplicitAny": false,
+		"module": "CommonJS",
+		"moduleResolution": "node",
+		"outDir": "./build",
+		"removeComments": true,
+		"resolveJsonModule": true,
+		"sourceMap": false,
+		"strict": true,
+		"strictNullChecks": false,
+		"target": "es2020",
+		"paths": {
+			"src/*": [
+				"./*"
+			],
+			"config/*": [
+				"../config/*"
+			]
+		}
+	},
+	"include": [
+		"config/*.ts",
+		"src/*",
+		"src/**/*",
+		"src/**/*.json"
+	]
+}

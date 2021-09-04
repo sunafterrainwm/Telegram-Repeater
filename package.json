@@ -1,0 +1,46 @@
+{
+	"name": "telegram-repeater",
+	"version": "1.0.0",
+	"description": "簡易自動回覆機器人",
+	"repository": "git+https://github.com/sunny00217wm/Telegram-Repeater",
+	"author": "sunny00217wm",
+	"scripts": {
+		"start": "ts-node -r tsconfig-paths/register ./src/index.ts",
+		"test": "npm run lint && npm run build && npm build-start",
+		"build": "tsc",
+		"build-start": "node build/src/index",
+		"lint": "eslint src/*.ts src/**/*.ts"
+	},
+	"main": "build/src/index.js",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/sunny00217wm/Telegram-Repeater/issues"
+	},
+	"private": true,
+	"dependencies": {
+		"module-alias": "^2.2.2",
+		"telegraf": "~3.39.0",
+		"typescript": "^4.4.2",
+		"winston": "^3.3.3"
+	},
+	"devDependencies": {
+		"@types/module-alias": "^2.0.1",
+		"@typescript-eslint/eslint-plugin": "^4.29.3",
+		"@typescript-eslint/parser": "^4.29.3",
+		"eslint": "^7.30.0",
+		"eslint-config-wikimedia": "^0.20.0",
+		"eslint-import-resolver-typescript": "^2.4.0",
+		"eslint-plugin-import": "^2.23.4",
+		"ts-node": "^10.1.0",
+		"tsconfig-paths": "^3.10.1",
+		"tslib": "^2.3.1"
+	},
+	"engines": {
+		"node": ">=14.0.0",
+		"npm": ">7.0.0"
+	},
+	"_moduleDirectories": [
+		"node_modules",
+		"src"
+	]
+}
