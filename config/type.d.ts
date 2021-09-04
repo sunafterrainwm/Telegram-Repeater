@@ -7,7 +7,7 @@ export interface ConfigTS {
 	 */
 	token: string;
 
-	polling: LaunchPollingOptions;
+	polling?: LaunchPollingOptions;
 
 	webhook?: LaunchWebhookOptions & {
 		/**
