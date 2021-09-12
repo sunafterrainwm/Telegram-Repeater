@@ -79,19 +79,41 @@ winston.info( 'Telegram-Repeater: Telegram 簡易自動回覆機器人 v1.0.0' )
 winston.info( '' );
 winston.info( 'Starting Telegram bot...' );
 
-const tgBot = new Telegraf( config.token );
+const tgBot = new Telegraf<Context>( config.token );
 
 let me: TT.User;
 
-tgBot.telegram.getMe().then( function ( info ) {
+tgBot.telegram.getMe().then( function ( info: TT.User ) {
 	me = info;
 
 	winston.info( `TelegramBot is ready, login as: ${ info.first_name }${ info.last_name ? ` ${ info.last_name }` : '' }@${ info.username }(${ info.id })` );
 } );
 
+const ignoreRegExp = config.ignoreRegExp || {
+	test() {
+		return false;
+	}
+};
+
+const beforeProcessText = config.beforeProcessText || function beforeProcessText() {
+	return true;
+};
+const beforeProcess = config.beforeProcess || function beforeProcess() {
+	return true;
+};
+
+const commandsTable = config.commandsTable || {};
+const replacesTable = config.replacesTable || [];
+const replaceFunc = config.replaceFunc || function ( text ) {
+	return text;
+};
+
+const ignoreFromID = config.ignoreFromID || [];
+const ignoreChatID = config.ignoreChatID || [];
+
 let gMsgId = 0;
 
-const startTime = Date.now() / 1000;
+const startTime: number = Date.now() / 1000;
 
 function processText( ctx: Context, text: string, msgId: number, processCmd?: boolean ): string {
 	if ( !text ) {
@@ -99,42 +121,49 @@ function processText( ctx: Context, text: string, msgId: number, processCmd?: bo
 	}
 
 	const info = `from: ${ ctx.from.id }, chat: ${ ctx.chat.id }, rawMsgId: ${ ctx.message.message_id }`;
+
+	if ( beforeProcessText( text, ctx ) ) {
+		winston.debug( `[msg] #${ msgId } Ignore (beforeProcessText) ${ info }` );
+		return '';
+	}
+
 	if ( processCmd ) {
 		const [ , cmd, , ] = text.match( /^\/([A-Za-z0-9_@]+)(\s+(.*)|\s*)$/u ) || [];
 		if ( cmd ) {
 			// 如果包含 Bot 名，判断是否为自己
 			const [ , c, , n ] = cmd.match( /^([A-Za-z0-9_]+)(|@([A-Za-z0-9_]+))$/u ) || [];
 			if ( ( n && ( n.toLowerCase() === ( me?.username || '' ).toLowerCase() ) ) || !n ) {
-				if ( c in config.commandsTable ) {
-					config.commandsTable[ c ]( ctx );
-					winston.debug( `[cmd] #${ msgId } Fire command ${ c } (text: ${ ctx.message.text }) ${ info }` );
+				if ( c in commandsTable ) {
+					commandsTable[ c ]( ctx );
+					winston.debug( `[cmd] #${ msgId } Fire command ${ c } (text: ${ text }) ${ info }` );
+					return;
 				}
 
 				if ( config.allowCommand === 'none' ) {
-					winston.debug( `[msg] #${ msgId } Ignore  (cmdSelf, text: ${ ctx.message.text }) ${ info }` );
+					winston.debug( `[msg] #${ msgId } Ignore  (cmdSelf, text: ${ text }) ${ info }` );
 					return;
 				}
 			} else {
 				if ( config.allowCommand !== 'all' ) {
-					winston.debug( `[msg] #${ msgId } Ignore (cmdOther, text: ${ ctx.message.text }) ${ info }` );
+					winston.debug( `[msg] #${ msgId } Ignore (cmdOther, text: ${ text }) ${ info }` );
 					return;
 				}
 			}
 		}
 	}
 
-	if ( ( config.ignoreFromID || [] ).includes( ctx.from.id ) ) {
-		winston.debug( `[msg] #${ msgId } Ignore (fromId, text: ${ ctx.message.text }) ${ info }` );
-		return;
-	} else if ( ( config.ignoreChatID || [] ).includes( ctx.chat.id ) ) {
-		winston.debug( `[msg] #${ msgId } Ignore (chatId, text: ${ ctx.message.text }) ${ info }` );
-		return;
-	} else if ( config.ignoreRegExp.test( text ) ) {
-		winston.debug( `[msg] #${ msgId } Ignore (ignoreRegExp, text: ${ ctx.message.text }) ${ info }` );
+	if ( ignoreRegExp.test( text ) ) {
+		winston.debug( `[msg] #${ msgId } Ignore (ignoreRegExp, text: ${ text }) ${ info }` );
 		return;
 	}
 
-	config.replacesTable.forEach( function ( [ search, replace ] ) {
+	text = replaceFunc( text, ctx );
+
+	if ( !text ) {
+		return;
+	}
+
+	replacesTable.forEach( function ( [ search, replace ] ) {
 		text = text.replace( search, replace );
 	} );
 
@@ -146,9 +175,20 @@ tgBot.on( 'message', async function ( ctx ) {
 		return;
 	}
 
-	const msgId = ++gMsgId;
-
+	const msgId: number = ++gMsgId;
 	const info = `from: ${ ctx.from.id }, chat: ${ ctx.chat.id }, rawMsgId: ${ ctx.message.message_id }`;
+
+	if ( beforeProcess( ctx ) ) {
+		winston.debug( `[msg] #${ msgId } Ignore (beforeProcess) ${ info }` );
+		return '';
+	} else if ( ignoreFromID.includes( ctx.from.id ) ) {
+		winston.debug( `[msg] #${ msgId } Ignore (fromId) ${ info }` );
+		return;
+	} else if ( ignoreChatID.includes( ctx.chat.id ) ) {
+		winston.debug( `[msg] #${ msgId } Ignore (chatId) ${ info }` );
+		return;
+	}
+
 	if ( 'text' in ctx.message ) {
 		const replyMessage = processText( ctx, ctx.message.text, msgId, true );
 
@@ -254,9 +294,17 @@ tgBot.on( 'message', async function ( ctx ) {
 } );
 
 if ( config.webhook && config.webhook.port > 0 ) {
+	try {
+		config.webhook.url = new URL( config.webhook.url ).href;
+	} catch ( e ) {
+		winston.error( `Can't parse webhook url: ${ e }` );
+		// eslint-disable-next-line no-process-exit
+		process.exit( 1 );
+	}
+
 	// 自动设置Webhook网址
 	if ( config.webhook.url ) {
-		if ( config.webhook.ssl.certPath ) {
+		if ( config.webhook.ssl?.certPath ) {
 			tgBot.telegram.setWebhook( config.webhook.url, {
 				certificate: {
 					source: config.webhook.ssl.certPath
@@ -283,7 +331,7 @@ if ( config.webhook && config.webhook.port > 0 ) {
 	tgBot.launch( {
 		webhook: config.webhook
 	} ).then( function () {
-		winston.info( `Telegram bot has started at ${ config.webhook.hookPath }.` );
+		winston.info( `Telegram bot has started at ${ config.webhook.url }.` );
 	} );
 } else {
 	tgBot.launch( {

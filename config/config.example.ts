@@ -30,7 +30,6 @@ const config: ConfigTS = {
 	allowSticker: true,
 
 	// 是否回覆檔案
-	// 作者沒開發存下來再上傳回去的功能，因此為直接轉傳該條訊息
 	allowMedia: true,
 
 	// 是否回覆指令
@@ -57,7 +56,7 @@ const config: ConfigTS = {
 		[ /^.*anyone.*$/, '沒有人，你悲劇了。' ] // 例如：整行替換
 	],
 
-	// 指令的處理方式
+	// 處理指令
 	commandsTable: {
 		start: function ( ctx ) {
 			ctx.tg.sendMessage( ctx.chat.id, '你好，本機器人會自動回覆你說的話，支援貼圖及檔案，若在開頭加上<code>(NOMO)</code>則不會回覆。', {

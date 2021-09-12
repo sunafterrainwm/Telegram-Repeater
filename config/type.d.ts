@@ -57,14 +57,33 @@ export interface ConfigTS {
 	ignoreRegExp?: RegExp;
 
 	/**
-	 * 把回覆的內容給替換掉
+	 * 把回覆的內容給替換掉（使用`String.prototype.replace`）
 	 */
 	replacesTable?: [ string | RegExp, string ][];
+
+	/**
+	 * 以函式把回覆的內容給替換掉
+	 *
+	 * 會早於`replacesTable`觸發
+	 */
+	replaceFunc?: ( text: string, ctx: Context ) => string;
 
 	/**
 	 * 指令的處理方式
 	 */
 	commandsTable?: Record<string, ( ctx: Context ) => void>;
+
+	/**
+	 * 對於一些比較複雜的規則的封鎖方式
+	 * 返回false就會阻止回覆
+	 */
+	beforeProcess?( ctx: Context ) : boolean;
+
+	/**
+	 * 對於一些比較複雜的規則的封鎖方式（僅阻止文字）
+	 * 返回false就會阻止回覆
+	 */
+	beforeProcessText?( text: string, ctx: Context ) : boolean;
 
 	/**
 	 * 系統紀錄檔
