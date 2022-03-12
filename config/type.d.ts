@@ -1,5 +1,8 @@
 import { Context } from 'telegraf';
 import { LaunchPollingOptions, LaunchWebhookOptions } from 'telegraf/typings/telegraf';
+import { User } from 'telegraf/typings/telegram-types';
+
+export type PromiseCallback<T> = T | Promise<T>;
 
 export interface ConfigTS {
 	/**
@@ -57,6 +60,16 @@ export interface ConfigTS {
 	ignoreRegExp?: RegExp;
 
 	/**
+	 * 當檢測到被禁言（無法成功發言且錯誤理由為被限制）時自動退出
+	 */
+	exitWhenRestrict?: boolean;
+
+	/**
+	 * 當設定禁言自動退出時永遠不退出的名單
+	 */
+	exitWhiteChatID?: number[];
+
+	/**
 	 * 把回覆的內容給替換掉（使用`String.prototype.replace`）
 	 */
 	replacesTable?: [ string | RegExp, string ][];
@@ -70,8 +83,9 @@ export interface ConfigTS {
 
 	/**
 	 * 指令的處理方式
+	 * 返回true時bot不會回覆任何東西
 	 */
-	commandsTable?: Record<string, ( ctx: Context ) => void>;
+	commandsTable?: Record<string, ( ctx: Context, self: User ) => PromiseCallback<void|boolean>>;
 
 	/**
 	 * 對於一些比較複雜的規則的封鎖方式

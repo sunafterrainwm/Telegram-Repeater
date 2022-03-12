@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import moduleAlias from 'module-alias';
 import path = require( 'path' );
 moduleAlias.addAliases( {
@@ -111,18 +110,21 @@ const replaceFunc = config.replaceFunc || function ( text ) {
 const ignoreFromID = config.ignoreFromID || [];
 const ignoreChatID = config.ignoreChatID || [];
 
+const exitWhenRestrict = config.exitWhenRestrict || false;
+const exitWhiteChatID = config.exitWhiteChatID || [];
+
 let gMsgId = 0;
 
 const startTime: number = Date.now() / 1000;
 
-function processText( ctx: Context, text: string, msgId: number, processCmd?: boolean ): string {
+async function processText( ctx: Context, text: string, msgId: number, processCmd?: boolean ): Promise<string> {
 	if ( !text ) {
 		return '';
 	}
 
 	const info = `from: ${ ctx.from.id }, chat: ${ ctx.chat.id }, rawMsgId: ${ ctx.message.message_id }`;
 
-	if ( beforeProcessText( text, ctx ) ) {
+	if ( !beforeProcessText( text, ctx ) ) {
 		winston.debug( `[msg] #${ msgId } Ignore (beforeProcessText) ${ info }` );
 		return '';
 	}
@@ -134,9 +136,12 @@ function processText( ctx: Context, text: string, msgId: number, processCmd?: bo
 			const [ , c, , n ] = cmd.match( /^([A-Za-z0-9_]+)(|@([A-Za-z0-9_]+))$/u ) || [];
 			if ( ( n && ( n.toLowerCase() === ( me?.username || '' ).toLowerCase() ) ) || !n ) {
 				if ( c in commandsTable ) {
-					commandsTable[ c ]( ctx );
 					winston.debug( `[cmd] #${ msgId } Fire command ${ c } (text: ${ text }) ${ info }` );
-					return;
+					const con = await commandsTable[ c ]( ctx, me );
+					if ( con !== undefined && !con ) {
+						winston.debug( `[cmd] #${ msgId } Ignore (cmdReturn, text: ${ text }) ${ info }` );
+						return;
+					}
 				}
 
 				if ( config.allowCommand === 'none' ) {
@@ -170,6 +175,25 @@ function processText( ctx: Context, text: string, msgId: number, processCmd?: bo
 	return text;
 }
 
+async function processSendRespond<T>( promise: Promise<T>, ctx: Context, msgId: number ): Promise<void> {
+	try {
+		await promise;
+	} catch ( e ) {
+		if (
+			String( e ).match( 'have no rights to send a message' )
+		) {
+			if ( exitWhenRestrict && !exitWhiteChatID.includes( ctx.chat.id ) ) {
+				winston.info( `[leave] bot leave group ${ ctx.chat.id } because bot was muted.` );
+				tgBot.telegram.leaveChat( ctx.chat.id );
+			} else {
+				winston.warn( `Can't send message #${ msgId }: bot was muted.` );
+			}
+		} else {
+			winston.warn( `Can't send message #${ msgId }:`, e );
+		}
+	}
+}
+
 tgBot.on( 'message', async function ( ctx ) {
 	if ( ctx.message.date + 3600 /* 1hr */ < startTime ) {
 		return;
@@ -178,7 +202,7 @@ tgBot.on( 'message', async function ( ctx ) {
 	const msgId: number = ++gMsgId;
 	const info = `from: ${ ctx.from.id }, chat: ${ ctx.chat.id }, rawMsgId: ${ ctx.message.message_id }`;
 
-	if ( beforeProcess( ctx ) ) {
+	if ( !beforeProcess( ctx ) ) {
 		winston.debug( `[msg] #${ msgId } Ignore (beforeProcess) ${ info }` );
 		return '';
 	} else if ( ignoreFromID.includes( ctx.from.id ) ) {
@@ -190,36 +214,20 @@ tgBot.on( 'message', async function ( ctx ) {
 	}
 
 	if ( 'text' in ctx.message ) {
-		const replyMessage = processText( ctx, ctx.message.text, msgId, true );
+		const replyMessage = await processText( ctx, ctx.message.text, msgId, true );
 
 		if ( replyMessage ) {
 			winston.debug( `[msg] #${ msgId } reply (text: ${ replyMessage }, rawText: ${ ctx.message.text }) ${ info }` );
-			try {
-				await tgBot.telegram.sendMessage( ctx.chat.id, replyMessage );
-			} catch ( e ) {
-				if ( String( e ).match( 'have no rights to send a message' ) ) {
-					tgBot.telegram.leaveChat( ctx.chat.id );
-					winston.info( `[leave] bot leave group ${ ctx.chat.id } because bot was muted.` );
-				} else {
-					throw e;
-				}
-			}
+
+			processSendRespond( tgBot.telegram.sendMessage( ctx.chat.id, replyMessage ), ctx, msgId );
 		}
 	} else {
 		const message: TT.Message = ctx.message;
 
 		if ( message.sticker && config.allowSticker ) {
 			winston.debug( `[msg] #${ msgId } reply (sticker: ${ message.sticker.file_id }) ${ info }` );
-			try {
-				tgBot.telegram.sendSticker( ctx.chat.id, message.sticker.file_id );
-			} catch ( e ) {
-				if ( String( e ).match( 'have no rights to send a message' ) ) {
-					winston.info( `[leave] bot leave group ${ ctx.chat.id } because bot was muted.` );
-					tgBot.telegram.leaveChat( ctx.chat.id );
-				} else {
-					throw e;
-				}
-			}
+
+			processSendRespond( tgBot.telegram.sendSticker( ctx.chat.id, message.sticker.file_id ), ctx, msgId );
 		} else if ( (
 			message.photo ||
 			message.audio ||
@@ -229,13 +237,13 @@ tgBot.on( 'message', async function ( ctx ) {
 		) && config.allowMedia ) {
 			let caption: string;
 			if ( message.caption ) {
-				caption = processText( ctx, message.caption, msgId, true );
+				caption = await processText( ctx, message.caption, msgId, true );
 				if ( !caption ) {
 					return;
 				}
 			}
 
-			let promise: Promise<any>;
+			let promise: Promise<TT.MessagePhoto|TT.MessageAudio|TT.MessageVoice|TT.MessageVideo|TT.MessageDocument>;
 			if ( message.photo ) {
 				let sz = 0;
 				let photoId: string;
@@ -256,7 +264,7 @@ tgBot.on( 'message', async function ( ctx ) {
 				} );
 				winston.debug( `[msg] #${ msgId } reply (audio: ${ message.audio.file_id }) ${ info }` );
 			} else if ( message.voice ) {
-				promise = tgBot.telegram.sendVideo( ctx.chat.id, message.voice.file_id, {
+				promise = tgBot.telegram.sendVoice( ctx.chat.id, message.voice.file_id, {
 					caption: caption
 				} );
 				winston.debug( `[msg] #${ msgId } reply (voice: ${ message.voice.file_id }) ${ info }` );
@@ -272,16 +280,7 @@ tgBot.on( 'message', async function ( ctx ) {
 				winston.debug( `[msg] #${ msgId } reply (document: ${ message.document.file_id }) ${ info }` );
 			}
 
-			try {
-				await promise;
-			} catch ( e ) {
-				if ( String( e ).match( 'have no rights to send a message' ) ) {
-					winston.info( `[leave] bot leave group ${ ctx.chat.id } because bot was muted.` );
-					tgBot.telegram.leaveChat( ctx.chat.id );
-				} else {
-					throw e;
-				}
-			}
+			processSendRespond( promise, ctx, msgId );
 		} else {
 			if ( message.new_chat_members && message.new_chat_members.map( function ( u ) {
 				return u.id;
