@@ -77,25 +77,27 @@ export interface ConfigTS {
 	/**
 	 * 以函式把回覆的內容給替換掉
 	 *
-	 * 會早於`replacesTable`觸發
+	 * 會早於 `replacesTable` 觸發
+	 *
+	 * @see {replacesTable}
 	 */
 	replaceFunc?: ( text: string, ctx: Context ) => string;
 
 	/**
 	 * 指令的處理方式
-	 * 返回true時bot不會回覆任何東西
+	 * 返回`false`時bot不會回覆任何東西
 	 */
 	commandsTable?: Record<string, ( ctx: Context, self: User ) => PromiseCallback<void|boolean>>;
 
 	/**
 	 * 對於一些比較複雜的規則的封鎖方式
-	 * 返回false就會阻止回覆
+	 * 返回`false`就會阻止回覆
 	 */
 	beforeProcess?( ctx: Context ) : boolean;
 
 	/**
 	 * 對於一些比較複雜的規則的封鎖方式（僅阻止文字）
-	 * 返回false就會阻止回覆
+	 * 返回`false`就會阻止回覆
 	 */
 	beforeProcessText?( text: string, ctx: Context ) : boolean;
 
@@ -112,5 +114,7 @@ export interface ConfigTS {
 		 * 紀錄檔檔名，如留空則只向螢幕輸出
 		 */
 		logfile: string;
+
+		logToChannel?: number;
 	};
 }

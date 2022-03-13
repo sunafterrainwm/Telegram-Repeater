@@ -1,17 +1,17 @@
-import moduleAlias from 'module-alias';
+import fs = require( 'fs' );
+import moduleAlias = require( 'module-alias' );
 import path = require( 'path' );
+import Telegraf, { Context } from 'telegraf';
+import * as TT from 'telegraf/typings/telegram-types';
+import winston = require( 'winston' );
+
 moduleAlias.addAliases( {
 	src: __dirname,
 	config: path.join( __dirname, '../config' )
 } );
 
+import { LogToChannel } from 'src/logToChannel';
 import config from 'config/config';
-
-import Telegraf, { Context } from 'telegraf';
-import * as TT from 'telegraf/typings/telegram-types';
-
-import winston = require( 'winston' );
-import * as fs from 'fs';
 
 // 日志初始化
 const logFormat: winston.Logform.FormatWrap = winston.format( function ( info: winston.Logform.TransformableInfo ) {
@@ -79,6 +79,13 @@ winston.info( '' );
 winston.info( 'Starting Telegram bot...' );
 
 const tgBot = new Telegraf<Context>( config.token );
+
+if ( config.logging.logToChannel ) {
+	winston.add( new LogToChannel( {
+		telegraf: tgBot,
+		logChannel: config.logging.logToChannel
+	} ) );
+}
 
 let me: TT.User;
 
